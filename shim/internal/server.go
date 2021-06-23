@@ -4,14 +4,17 @@
 package internal
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -81,6 +84,8 @@ func NewServer(
 		serverOpts = append(serverOpts, grpc.Creds(credentials.NewTLS(tlsConf)))
 	}
 
+	serverOpts = append(serverOpts, grpc.UnaryInterceptor(unaryServerLogInterceptor()))
+
 	// Default properties follow - let's start simple and stick with defaults for now.
 	// These match Fabric peer side properties. We can expose these as user properties
 	// if needed
@@ -103,4 +108,16 @@ func NewServer(
 	server := grpc.NewServer(serverOpts...)
 
 	return &Server{Listener: listener, Server: server}, nil
+}
+
+func unaryServerLogInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		startTime := time.Now()
+
+		resp, err := handler(ctx, req)
+		st, _ := status.FromError(err)
+		fmt.Printf("unary call %s completed grpc.code: %s, grpc.call_duration: %v", info.FullMethod, st.Code(), time.Since(startTime))
+
+		return resp, err
+	}
 }
